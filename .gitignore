@@ -1,0 +1,31 @@
+# Virtual Environment
+venv39/
+venv/
+env/
+__pycache__/
+
+# Python
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs and temp files
+*.log
+logs/
+*.mp3
+*.wav
+jarvis_speech_*.wav
+
+# Cache
+.cache/
