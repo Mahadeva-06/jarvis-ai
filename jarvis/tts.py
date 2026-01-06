@@ -1,11 +1,12 @@
 """
 Jarvis TTS Module - Simple gTTS Implementation
-Generates speech from text using Google Text-to-Speech
+Generates speech from text using Google Text-to-Speech or espeak
 """
 
 import os
 import sys
 import time
+import subprocess
 from gtts import gTTS
 
 # Add current directory to path for imports
@@ -34,7 +35,7 @@ class TextToSpeech:
     def speak(self, text, speaker_wav=None, language='en', speed=1.0, 
               output_file=None, auto_play=True):
         """
-        Generate speech using gTTS
+        Generate speech using gTTS (or espeak as fallback)
         
         Args:
             text: Text to speak
@@ -54,16 +55,39 @@ class TextToSpeech:
             text_preview = text[:50] + "..." if len(text) > 50 else text
             print(f"[TTS] Generating: '{text_preview}'")
             
-            # Generate speech with gTTS
-            tts = gTTS(text=text, lang='en', slow=False)
-            tts.save(output_file)
+            # Try gTTS first
+            try:
+                tts = gTTS(text=text, lang='en', slow=False)
+                tts.save(output_file)
+                print(f"[TTS] ✅ Generated: {output_file}")
+                
+                if auto_play:
+                    self.play_audio(output_file)
+                
+                return output_file
+                
+            except Exception as e:
+                print(f"[WARNING] gTTS failed: {e}, trying espeak...")
             
-            print(f"[TTS] ✅ Generated: {output_file}")
+            # Fallback to espeak (offline)
+            import subprocess
+            wav_output = output_file.replace('.mp3', '.wav')
+            result = subprocess.run(
+                ['espeak', '-w', wav_output, text],
+                capture_output=True,
+                timeout=10
+            )
             
-            if auto_play:
-                self.play_audio(output_file)
+            if result.returncode == 0 and os.path.exists(wav_output):
+                print(f"[TTS] ✅ Generated (espeak): {wav_output}")
+                
+                if auto_play:
+                    self.play_audio(wav_output)
+                
+                return wav_output
             
-            return output_file
+            print(f"[ERROR] Both gTTS and espeak failed")
+            return None
             
         except Exception as e:
             print(f"[ERROR] TTS error: {e}")
