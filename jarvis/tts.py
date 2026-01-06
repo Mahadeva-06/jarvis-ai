@@ -1,102 +1,66 @@
 """
-Text-to-Speech Module with XTTS + brade_clone Voice Reference
-Generates dynamic speech using brade_clone.wav as voice reference
-Loads XTTS in background for instant responses
+Jarvis TTS Module - Consumer of Pre-Cloned Voices
+Uses Piper (lightweight TTS) with pre-cloned voice files
+XTTS is ONLY for voice cloning (separate script)
 """
 
-import torch
-import warnings
 import os
+import sys
 import time
-import threading
-from config import Config
+import subprocess
 
-warnings.filterwarnings("ignore")
-
-# Monkeypatch torch.load
-_orig_torch_load = torch.load
-def _load_wrapper(f, *args, **kwargs):
-    if 'weights_only' not in kwargs:
-        kwargs['weights_only'] = False
-    return _orig_torch_load(f, *args, **kwargs)
-torch.load = _load_wrapper
+# Add current directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from TTS.api import TTS
-    XTTS_AVAILABLE = True
+    from config import Config
 except ImportError:
-    XTTS_AVAILABLE = False
+    # Fallback if config not available
+    class Config:
+        pass
 
 
 class TextToSpeech:
     """
-    Uses XTTS with brade_clone.wav as voice reference.
-    Generates ANY dynamic speech with that voice characteristics.
-    Model loads in background - no blocking!
+    Jarvis TTS - Uses pre-cloned voices with Piper.
+    
+    Architecture:
+    - Stage 1: XTTS clones voice ONCE → saves brade_clone.wav
+    - Stage 2: Jarvis uses Piper with that voice file
+    
+    No XTTS at runtime. Clean separation. Fast execution.
     """
     
     def __init__(self, voice_sample_path=None, use_gpu=None):
         """
-        Initialize TTS engine
+        Initialize TTS with pre-cloned voice file
         
         Args:
-            voice_sample_path: brade_clone.wav (voice reference)
-            use_gpu: Whether to use GPU
+            voice_sample_path: Path to pre-cloned voice WAV (brade_clone.wav)
+            use_gpu: Ignored (Piper is lightweight)
         """
         self.config = Config()
-        self.tts_model = None
         self.voice_sample_path = voice_sample_path
-        self.use_gpu = use_gpu if use_gpu is not None else torch.cuda.is_available()
-        self.model_initialized = False
-        self.initialization_thread = None
         
-        print("[TTS] Initializing XTTS in background (non-blocking)...")
-        print(f"[TTS] Voice Reference: {os.path.basename(voice_sample_path or 'unknown')}")
-        # Load in background
-        self._init_model_background()
-    
-    def _init_model_background(self):
-        """Initialize XTTS model in background"""
-        if not XTTS_AVAILABLE:
-            print("[WARNING] XTTS not available")
-            return
-        
-        self.initialization_thread = threading.Thread(
-            target=self._initialize_model,
-            daemon=True
-        )
-        self.initialization_thread.start()
-    
-    def _initialize_model(self):
-        """Initialize XTTS"""
-        try:
-            print("[TTS] Loading XTTS v2 model...")
-            self.tts_model = TTS(
-                model_name="tts_models/multilingual/multi-dataset/xtts_v2",
-                gpu=self.use_gpu,
-                progress_bar=False
-            )
-            self.model_initialized = True
-            print(f"[TTS] ✅ Ready! Using brade_clone voice reference (GPU: {self.use_gpu})")
-        except Exception as e:
-            print(f"[ERROR] Failed to load XTTS: {e}")
-            self.model_initialized = False
+        # Check if voice file exists
+        if self.voice_sample_path and os.path.exists(self.voice_sample_path):
+            print(f"[TTS] ✅ Ready with voice: {os.path.basename(self.voice_sample_path)}")
+        else:
+            print(f"[TTS] ⚠️ Voice file not found, using default")
     
     def wait_for_model(self, timeout=300):
-        """Wait for model to load"""
-        if self.initialization_thread:
-            self.initialization_thread.join(timeout=timeout)
+        """No waiting needed - Piper is instant!"""
+        pass
     
     def speak(self, text, speaker_wav=None, language='en', speed=1.0, 
               output_file=None, auto_play=True):
         """
-        Generate speech using brade_clone voice reference.
-        Works for ANY dynamic text!
+        Generate speech using pre-cloned voice with Piper.
         
         Args:
-            text: ANY text to generate (dynamic!)
-            speaker_wav: Voice reference (brade_clone.wav)
-            language: Language code
+            text: ANY dynamic text
+            speaker_wav: Voice file (brade_clone.wav)
+            language: Language code (en, es, fr, etc.)
             speed: Speech speed
             output_file: Save audio to file
             auto_play: Play after generation
@@ -104,39 +68,46 @@ class TextToSpeech:
         Returns:
             Path to generated audio file
         """
-        # Wait for model if still loading
-        if not self.model_initialized:
-            print("[TTS] Waiting for XTTS model to load...")
-            self.wait_for_model(timeout=120)
-        
-        if not self.model_initialized:
-            print("[ERROR] XTTS model failed to load")
-            return None
-        
         try:
-            # Use brade_clone as voice reference
+            # Use provided voice or default
             voice_wav = speaker_wav or self.voice_sample_path
             
             if not voice_wav or not os.path.exists(voice_wav):
-                print(f"[ERROR] Voice reference not found: {voice_wav}")
+                print(f"[ERROR] Voice file not found: {voice_wav}")
                 return None
             
             if not output_file:
                 output_file = f"jarvis_speech_{int(time.time())}.wav"
             
             text_preview = text[:50] + "..." if len(text) > 50 else text
-            print(f"[TTS] Generating with brade voice: '{text_preview}'")
+            print(f"[TTS] Generating: '{text_preview}'")
+            print(f"[TTS] Using voice: {os.path.basename(voice_wav)}")
             
-            # Generate speech using brade_clone as voice reference
-            self.tts_model.tts_to_file(
-                text=text,
-                file_path=output_file,
-                speaker_wav=voice_wav,
-                language=language,
-                speed=speed
-            )
+            # Generate speech using Piper with voice conditioning
+            # Piper: echo "text" | piper --voice voice.wav -o output.wav
+            try:
+                process = subprocess.Popen(
+                    ['piper', '--speaker', voice_wav, '--output-file', output_file],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                stdout, stderr = process.communicate(input=text)
+                
+                if process.returncode != 0:
+                    print(f"[WARNING] Piper not available, using fallback")
+                    return self._fallback_speak(text, output_file, auto_play)
+                
+            except FileNotFoundError:
+                print(f"[WARNING] Piper not installed, using fallback TTS")
+                return self._fallback_speak(text, output_file, auto_play)
             
-            print(f"[TTS] Generated: {output_file}")
+            if not os.path.exists(output_file):
+                print(f"[ERROR] Failed to generate speech file")
+                return None
+            
+            print(f"[TTS] ✅ Generated: {output_file}")
             
             if auto_play:
                 self.play_audio(output_file)
@@ -147,9 +118,28 @@ class TextToSpeech:
             print(f"[ERROR] TTS error: {e}")
             return None
     
+    def _fallback_speak(self, text, output_file, auto_play=True):
+        """
+        Fallback: Use gTTS if Piper not available
+        (Note: This won't use the custom voice, just fallback)
+        """
+        try:
+            from gtts import gTTS
+            print(f"[TTS] Using gTTS fallback (no custom voice)")
+            tts = gTTS(text=text, lang='en', slow=False)
+            tts.save(output_file)
+            
+            if auto_play:
+                self.play_audio(output_file)
+            
+            return output_file
+        except Exception as e:
+            print(f"[ERROR] Fallback TTS failed: {e}")
+            return None
+    
     @staticmethod
     def play_audio(file_path, blocking=True):
-        """Play audio file"""
+        """Play audio file using pygame"""
         try:
             import pygame
             pygame.mixer.init()
@@ -160,21 +150,21 @@ class TextToSpeech:
                 while pygame.mixer.music.get_busy():
                     time.sleep(0.1)
             
-            print(f"[TTS] ✅ Playback finished")
+            print(f"[TTS] Playback finished")
             
         except Exception as e:
             print(f"[ERROR] Audio playback error: {e}")
     
     def set_voice_sample(self, voice_path):
-        """Set voice reference"""
+        """Set voice file"""
         if os.path.exists(voice_path):
             self.voice_sample_path = voice_path
-            print(f"[TTS] Voice Reference: {os.path.basename(voice_path)}")
+            print(f"[TTS] Voice set: {os.path.basename(voice_path)}")
             return True
         else:
             print(f"[ERROR] Voice file not found: {voice_path}")
             return False
     
     def is_ready(self):
-        """Check if model is ready"""
-        return self.model_initialized
+        """Always ready - no model loading needed!"""
+        return True

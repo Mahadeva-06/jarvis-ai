@@ -1,13 +1,21 @@
 """
-Configuration Module
-Settings and constants for Jarvis
+Configuration Module for Jarvis
+
+🧠 ARCHITECTURE:
+- STAGE 1 (Voice Cloning): Use XTTS ONCE → save voice profile (brade_clone.wav)
+- STAGE 2 (Jarvis Speaking): Use Piper TTS with saved voice file
+
+✅ SEPARATION OF CONCERNS:
+  XTTS = Voice Factory (used ONCE for cloning)
+  Piper = Voice Engine (lightweight TTS at runtime)
+  Jarvis = Voice Consumer (uses pre-cloned voices)
 """
 
 import os
 
 
 class Config:
-    """Configuration settings for Jarvis"""
+    """Configuration settings for Jarvis - Clean 2-Stage Voice System"""
     
     # Speech Recognition
     LANGUAGE = 'en-US'
@@ -18,7 +26,7 @@ class Config:
     
     # System
     SYSTEM_NAME = 'Jarvis'
-    VERSION = '1.0.0'
+    VERSION = '2.0.0'  # Updated with new architecture
     
     # Paths
     PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -26,10 +34,10 @@ class Config:
     VOICES_DIR = os.path.join(PROJECT_ROOT, 'voices')
     DEFAULT_VOICE = os.path.join(VOICES_DIR, 'brade_clone.wav')
     
-    # TTS Settings
+    # TTS Settings (Piper - Lightweight)
     TTS_LANGUAGE = 'en'
     TTS_SPEED = 1.0
-    TTS_USE_GPU = True
+    TTS_USE_GPU = False  # Piper doesn't need GPU
     
     # Logging
     DEBUG = True
